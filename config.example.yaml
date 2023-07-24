@@ -1,0 +1,12 @@
+dsn: "sqlite3:///abs/path/to/feed.db"
+subscribers:
+  - name: foo
+    email: foo@example.com
+    sites:
+      - name: Evan Jones
+        url: https://www.evanjones.ca/index.rss
+    schedule: '* * * * *'
+mailSender:
+  smtpServer: smtp.example.com:587
+  senderAddr: sender@example.com
+  password: password of sender email

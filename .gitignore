@@ -1,0 +1,5 @@
+.idea
+config.yaml
+*.out
+feed
+feed.db
