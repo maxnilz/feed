@@ -14,7 +14,7 @@ import (
 func main() {
 	var configFile string
 	var verbose bool
-	flag.StringVar(&configFile, "config", "", "configuration file")
+	flag.StringVar(&configFile, "config", "config.yaml", "configuration file")
 	flag.BoolVar(&verbose, "verbose", false, "verbose log")
 	flag.Parse()
 	if configFile == "" {
@@ -46,30 +46,33 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	worker := NewWorker(config, storage, mailbox)
 
 	scheduler := NewScheduler(logger)
-	for _, it := range config.Subscribers {
-		if err = scheduler.Schedule(it.Schedule, worker); err != nil {
+	for _, subscriber := range config.Subscribers {
+		worker, err := NewWorker(subscriber, storage, mailbox)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err = scheduler.Schedule(subscriber.Schedule, worker); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		scheduler.Run(ctx)
-	}()
+
+	scheduler.Start(ctx)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
 	go func() {
 		<-sigs
-		cancel()
-		scheduler.Stop()
-		storage.Close()
 		done <- true
 	}()
 
 	<-done
+
+	cancel()
+	scheduler.Stop()
+	storage.Close()
 }

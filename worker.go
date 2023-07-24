@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -17,40 +19,38 @@ type Worker struct {
 	storage Storage
 	mailbox Mailbox
 
-	Sites         []Site
-	Subscriptions map[Site][]Subscriber
+	subscriber Subscriber
 
 	fp *gofeed.Parser
 }
 
-func NewWorker(cfg Config, storage Storage, mailbox Mailbox) *Worker {
-	var sites []Site
-	subscriptions := map[Site][]Subscriber{}
-	for _, it := range cfg.Subscribers {
-		for _, site := range it.Sites {
-			if _, ok := subscriptions[site]; !ok {
-				sites = append(sites, site)
-				subscriptions[site] = make([]Subscriber, 0)
-			}
-			subscriptions[site] = append(subscriptions[site], it)
+func NewWorker(subscriber Subscriber, storage Storage, mailbox Mailbox) (*Worker, error) {
+	if subscriber.Name == "" {
+		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber name is required")
+	}
+	if subscriber.Email == "" {
+		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber email is required")
+	}
+	for _, site := range subscriber.Sites {
+		if _, err := url.Parse(site.URL); err != nil {
+			return nil, errors.Newf(errors.InvalidArgument, nil, "found invalid site url in %s", subscriber.Name)
 		}
 	}
 	return &Worker{
-		storage:       storage,
-		mailbox:       mailbox,
-		Sites:         sites,
-		Subscriptions: subscriptions,
-		fp:            gofeed.NewParser(),
-	}
+		storage:    storage,
+		mailbox:    mailbox,
+		subscriber: subscriber,
+		fp:         gofeed.NewParser(),
+	}, nil
 }
 
 func (w *Worker) Name() string {
-	return "feeds worker"
+	return fmt.Sprintf(w.subscriber.Name)
 }
 
 func (w *Worker) Run(ctx context.Context) error {
 	var feeds Feeds
-	for _, site := range w.Sites {
+	for _, site := range w.subscriber.Sites {
 		out, err := w.collectFeedsFromSite(ctx, site)
 		if err != nil {
 			return err
@@ -100,10 +100,6 @@ func (w *Worker) collectFeedsFromSite(ctx context.Context, site Site) ([]*Feed, 
 }
 
 func (w *Worker) collectFeeds(ctx context.Context, site Site, r io.Reader) ([]*Feed, error) {
-	subscribers := w.Subscriptions[site]
-	if len(subscribers) == 0 {
-		return nil, nil
-	}
 	feed, err := w.fp.Parse(r)
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "parse feeds at %v failed", site.URL)
@@ -119,41 +115,39 @@ func (w *Worker) collectFeeds(ctx context.Context, site Site, r io.Reader) ([]*F
 	}
 
 	var feeds []*Feed
-	for _, it := range subscribers {
-		var cursor time.Time
-		cursor, err = w.storage.GetLatestFeedWaterMark(ses, it.Email, site.URL)
-		if err != nil {
-			return nil, err
+	var cursor time.Time
+	cursor, err = w.storage.GetLatestFeedWaterMark(ses, w.subscriber.Email, site.URL)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < len(feed.Items); i++ {
+		f := feed.Items[i]
+		tm := f.PublishedParsed
+		if f.UpdatedParsed != nil {
+			tm = f.UpdatedParsed
 		}
-		for i := 0; i < len(feed.Items); i++ {
-			f := feed.Items[i]
-			tm := f.PublishedParsed
-			if f.UpdatedParsed != nil {
-				tm = f.UpdatedParsed
-			}
-			if !tm.After(cursor) {
-				continue
-			}
-			authors := make([]string, 0, len(f.Authors))
-			for _, a := range f.Authors {
-				authors = append(authors, a.Name)
-			}
-			ent := &Feed{
-				Id:          uuid.NewString(),
-				Email:       Email(it.Email),
-				SiteURL:     site.URL,
-				SiteName:    site.Name,
-				Title:       f.Title,
-				Description: f.Description,
-				Content:     f.Content,
-				Link:        f.Link,
-				UpdatedAt:   f.Updated,
-				PublishedAt: f.Published,
-				Author:      strings.Join(authors, ", "),
-				FetchAt:     time.Now(),
-			}
-			feeds = append(feeds, ent)
+		if !tm.After(cursor) {
+			continue
 		}
+		authors := make([]string, 0, len(f.Authors))
+		for _, a := range f.Authors {
+			authors = append(authors, a.Name)
+		}
+		ent := &Feed{
+			Id:          uuid.NewString(),
+			Email:       Email(w.subscriber.Email),
+			SiteURL:     site.URL,
+			SiteName:    site.Name,
+			Title:       f.Title,
+			Description: f.Description,
+			Content:     f.Content,
+			Link:        f.Link,
+			UpdatedAt:   f.Updated,
+			PublishedAt: f.Published,
+			Author:      strings.Join(authors, ", "),
+			FetchAt:     time.Now(),
+		}
+		feeds = append(feeds, ent)
 	}
 	return feeds, nil
 }

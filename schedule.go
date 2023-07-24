@@ -42,7 +42,7 @@ func (s *Scheduler) Schedule(spec string, job Job) error {
 	return nil
 }
 
-func (s *Scheduler) Run(ctx context.Context) {
+func (s *Scheduler) Start(ctx context.Context) {
 	s.Lock()
 	if s.running {
 		s.Unlock()
@@ -50,7 +50,12 @@ func (s *Scheduler) Run(ctx context.Context) {
 	}
 	s.running = true
 	s.Unlock()
-	s.run(ctx)
+
+	s.jobWaiter.Add(1)
+	go func() {
+		defer s.jobWaiter.Done()
+		s.run(ctx)
+	}()
 }
 
 func (s *Scheduler) run(ctx context.Context) {

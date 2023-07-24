@@ -5,6 +5,15 @@ subscribers:
     sites:
       - name: Evan Jones
         url: https://www.evanjones.ca/index.rss
+    # follow the spec in https://en.wikipedia.org/wiki/Cron, in which it
+    # requires 5 entries: minute, hour, day of month, month and day of week.
+    # you can find examples from there https://crontab.guru/
+    schedule: '* * * * *'
+  - name: bar
+    email: bar@example.com
+    sites:
+      - name: Evan Jones
+        url: https://www.evanjones.ca/index.rss
     schedule: '* * * * *'
 mailSender:
   smtpServer: smtp.example.com:587

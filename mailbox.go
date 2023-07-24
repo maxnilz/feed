@@ -19,7 +19,7 @@ func NewMailbox(cfg Config, logger Logger) (Mailbox, error) {
 	mailSender := cfg.MailSender
 	host, port, err := net.SplitHostPort(mailSender.SmtpServer)
 	if err != nil {
-		return nil, errors.Newf(errors.InvalidArgument, err, "invalid hostport")
+		return nil, errors.Newf(errors.InvalidArgument, err, "invalid host port")
 	}
 	senderAddr, password := mailSender.SenderAddr, mailSender.Password
 	if senderAddr == "" || password == "" {

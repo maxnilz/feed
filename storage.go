@@ -10,6 +10,9 @@ import (
 )
 
 func NewStorage(cfg Config) (Storage, error) {
+	if cfg.DSN == "" {
+		return nil, errors.Newf(errors.InvalidArgument, nil, "missing dsn")
+	}
 	u, err := url.Parse(cfg.DSN)
 	if err != nil {
 		return nil, errors.Newf(errors.InvalidArgument, err, "invalid dsn: %s", cfg.DSN)
