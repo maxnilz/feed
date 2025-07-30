@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"net/textproto"
 
 	"github.com/maxnilz/feed/errors"
 )
@@ -52,14 +53,11 @@ func (s *smtpImpl) SendFeeds(feeds Feeds, callback SendCallback) error {
 	var fs []*Feed
 	for _, email := range feeds.Emails {
 		buf := bytes.Buffer{}
-		buf.WriteString("From: ")
-		buf.WriteString(s.senderAddr)
-		buf.WriteString("\n")
-		buf.WriteString("To: ")
-		buf.WriteString(email.String())
-		buf.WriteString("\n")
-		buf.WriteString("Content-Type: text/html; charset=UTF-8\n")
-		buf.WriteString("Subject: RSS feeds notification\n\n")
+		buf.WriteString("From: " + s.senderAddr + "\r\n")
+		buf.WriteString("To: " + email.String() + "\r\n")
+		buf.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+		buf.WriteString("Subject: RSS feeds notification\r\n")
+		buf.WriteString("\r\n")
 		buf.WriteString("<body>")
 		for _, site := range feeds.Sites {
 			siteFeeds := feeds.SiteFeeds(email, site)
@@ -83,7 +81,17 @@ func (s *smtpImpl) SendFeeds(feeds Feeds, callback SendCallback) error {
 		buf.WriteString("</body>")
 		s.Logger.Info("Send RSS feeds notification", "email", email)
 		if err := smtp.SendMail(s.hostPort, s.auth, s.senderAddr, []string{email.String()}, buf.Bytes()); err != nil {
-			return errors.Newf(errors.Internal, err, "send feeds failed")
+			shortErr := textproto.ProtocolError("short response: ")
+			if err.Error() == shortErr.Error() {
+				// Ignore the error if it's a short response error, refer to
+				//  smpt.Client.Quit
+				//    smpt.Client.cmd
+				//      c.Text.ReadResponse(expectCode)
+				//        net.textproto.Reader.ReadResponse
+				//          net.textproto.Reader.readCodeLine
+				//            net.textproto.Reader.parseCodeLine
+				return errors.Newf(errors.Internal, err, "send feeds failed")
+			}
 		}
 		if callback != nil {
 			_ = callback(fs...)

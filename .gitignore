@@ -1,5 +1,6 @@
 .idea
 config.yaml
+config-prod.yaml
 *.out
 feed
 feed.db
