@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/maxnilz/feed/errors"
@@ -107,4 +109,26 @@ func (fs *Feeds) SiteFeeds(email Email, site Site) []*Feed {
 		return nil
 	}
 	return out
+}
+
+func (fs *Feeds) String() string {
+	sb := strings.Builder{}
+	// total count
+	sb.WriteString(fmt.Sprintf("Total Feeds: %d\n", len(fs.List)))
+	// header
+	sb.WriteString("Id | Email | SiteURL | Title\n")
+	sb.WriteString(strings.Repeat("-", 60))
+	sb.WriteString("\n")
+	// items
+	for _, feed := range fs.List {
+		sb.WriteString(feed.Id)
+		sb.WriteString(" | ")
+		sb.WriteString(feed.Email.String())
+		sb.WriteString(" | ")
+		sb.WriteString(feed.SiteURL)
+		sb.WriteString(" | ")
+		sb.WriteString(feed.Title)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }

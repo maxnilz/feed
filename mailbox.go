@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
-	"net/textproto"
+	"strings"
 
 	"github.com/maxnilz/feed/errors"
 )
@@ -79,17 +79,17 @@ func (s *smtpImpl) SendFeeds(feeds Feeds, callback SendCallback) error {
 			buf.WriteString("</ol>")
 		}
 		buf.WriteString("</body>")
-		s.Logger.Info("Send RSS feeds notification", "email", email)
+		s.Logger.Info("Send RSS feeds notification", "email", email, "feeds", len(fs))
 		if err := smtp.SendMail(s.hostPort, s.auth, s.senderAddr, []string{email.String()}, buf.Bytes()); err != nil {
-			shortErr := textproto.ProtocolError("short response: ")
-			if err.Error() == shortErr.Error() {
-				// Ignore the error if it's a short response error, refer to
-				//  smpt.Client.Quit
-				//    smpt.Client.cmd
-				//      c.Text.ReadResponse(expectCode)
-				//        net.textproto.Reader.ReadResponse
-				//          net.textproto.Reader.readCodeLine
-				//            net.textproto.Reader.parseCodeLine
+			const shortErrMsg = "short response: "
+			// Ignore the error if it's a short response error, refer to
+			//  smpt.Client.Quit
+			//    smpt.Client.cmd
+			//      c.Text.ReadResponse(expectCode)
+			//        net.textproto.Reader.ReadResponse
+			//          net.textproto.Reader.readCodeLine
+			//            net.textproto.Reader.parseCodeLine
+			if !strings.HasPrefix(err.Error(), shortErrMsg) {
 				return errors.Newf(errors.Internal, err, "send feeds failed")
 			}
 		}
