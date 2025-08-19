@@ -14,8 +14,9 @@ type Subscriber struct {
 }
 
 type Site struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
+	Name string   `yaml:"name"`
+	URL  string   `yaml:"url"`
+	URLs []string `yaml:"urls"`
 }
 
 type MailSender struct {

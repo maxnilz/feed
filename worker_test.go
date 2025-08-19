@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	stderr "errors"
+	"fmt"
 	"log"
+	"net/http"
 	"net/textproto"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/maxnilz/feed/errors"
+	"github.com/mmcdole/gofeed"
 	"gopkg.in/yaml.v3"
 )
 
@@ -58,4 +62,37 @@ func TestErr(t *testing.T) {
 	if !stderr.Is(err, textproto.ProtocolError("short response: ")) {
 		t.Errorf("error not matched: %v", err)
 	}
+}
+
+func TestParseFeed(t *testing.T) {
+	url := "https://hnrss.org/newest?q=prompt+engineering"
+	feed, err := parseFeedSource(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(len(feed.Items))
+}
+
+func parseFeedSource(url string) (*gofeed.Feed, error) {
+	ctx := context.Background()
+	client := http.DefaultClient
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, errors.Newf(errors.Internal, err, "create get request to %v failed", url)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.Newf(errors.Internal, err, "request feeds to %v failed", url)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.Newf(errors.Internal, nil, "invalid feed response: %v", resp.Status)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, errors.Newf(errors.Internal, err, "parse feed from %v failed", url)
+	}
+	return feed, nil
 }

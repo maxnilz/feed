@@ -59,17 +59,24 @@ func (s *smtpImpl) SendFeeds(feeds Feeds, callback SendCallback) error {
 		buf.WriteString("Subject: RSS feeds notification\r\n")
 		buf.WriteString("\r\n")
 		buf.WriteString("<body>")
-		for _, site := range feeds.Sites {
-			siteFeeds := feeds.SiteFeeds(email, site)
-			if len(siteFeeds) == 0 {
+		sitesFeeds, ok := feeds.SitesFeeds(email)
+		if !ok {
+			continue
+		}
+		for _, site := range sitesFeeds.names {
+			siteFeeds, ok := sitesFeeds.get(site)
+			if !ok || len(siteFeeds) == 0 {
 				continue
 			}
 			fs = append(fs, siteFeeds...)
-			buf.WriteString(fmt.Sprintf("<h1>New posts from <a href=\"%s\">%s</a></h1>", site.URL, site.Name))
+			buf.WriteString(fmt.Sprintf("<h1>New posts from %s</h1>", site))
 			buf.WriteString("<ol>")
 			for _, feed := range siteFeeds {
 				buf.WriteString("<li>")
 				buf.WriteString(fmt.Sprintf("<a href=\"%s\">%s</a>", feed.Link, feed.Title))
+				if feed.Id != "" {
+					buf.WriteString(fmt.Sprintf("&nbsp;<a href=\"%s\">%s</a>", feed.Id, "[guid]"))
+				}
 				buf.WriteString(fmt.Sprintf("&nbsp;%s", feed.PublishedAt))
 				if feed.UpdatedAt != "" {
 					buf.WriteString(fmt.Sprintf("&nbsp;%s", feed.UpdatedAt))

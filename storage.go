@@ -72,43 +72,55 @@ func (e Email) String() string {
 	return string(e)
 }
 
+type SitesFeeds struct {
+	// map of site name to feeds
+	m     map[string][]*Feed
+	names []string
+}
+
+func (sf *SitesFeeds) add(name string, feed *Feed) {
+	if sf.m == nil {
+		sf.m = make(map[string][]*Feed)
+	}
+	if _, ok := sf.m[name]; !ok {
+		sf.names = append(sf.names, name)
+	}
+	sf.m[name] = append(sf.m[name], feed)
+}
+
+func (sf *SitesFeeds) get(name string) ([]*Feed, bool) {
+	feeds, ok := sf.m[name]
+	return feeds, ok
+}
+
 type Feeds struct {
 	Emails []Email
-	Sites  []Site
 	List   []*Feed
-	Map    map[Email]map[Site][]*Feed
+
+	// feeds by email
+	m map[Email]*SitesFeeds
 }
 
 func (fs *Feeds) Append(feeds ...*Feed) {
+	if fs.m == nil {
+		fs.m = make(map[Email]*SitesFeeds)
+	}
 	for _, feed := range feeds {
 		fs.List = append(fs.List, feed)
-		if fs.Map == nil {
-			fs.Map = make(map[Email]map[Site][]*Feed)
-		}
-		sitesFeeds, ok := fs.Map[feed.Email]
+		sitesFeeds, ok := fs.m[feed.Email]
 		if !ok {
-			sitesFeeds = make(map[Site][]*Feed)
-			fs.Map[feed.Email] = sitesFeeds
+			sitesFeeds = &SitesFeeds{}
+			fs.m[feed.Email] = sitesFeeds
 			fs.Emails = append(fs.Emails, feed.Email)
 		}
-		site := Site{Name: feed.SiteName, URL: feed.SiteURL}
-		if _, ok = sitesFeeds[site]; !ok {
-			fs.Sites = append(fs.Sites, site)
-		}
-		sitesFeeds[site] = append(sitesFeeds[site], feed)
+		site := feed.SiteName
+		sitesFeeds.add(site, feed)
 	}
 }
 
-func (fs *Feeds) SiteFeeds(email Email, site Site) []*Feed {
-	sitesFeeds, ok := fs.Map[email]
-	if !ok {
-		return nil
-	}
-	out, ok := sitesFeeds[site]
-	if !ok {
-		return nil
-	}
-	return out
+func (fs *Feeds) SitesFeeds(email Email) (*SitesFeeds, bool) {
+	sitesFeeds, ok := fs.m[email]
+	return sitesFeeds, ok
 }
 
 func (fs *Feeds) String() string {

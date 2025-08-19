@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/maxnilz/feed/errors"
 	"github.com/mmcdole/gofeed"
 )
@@ -83,26 +82,43 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) collectFeedsFromSite(ctx context.Context, site Site) ([]*Feed, error) {
+	var feeds []*Feed
+	endpoints := []string{site.URL}
+	endpoints = append(endpoints, site.URLs...)
+	for _, endpoint := range endpoints {
+		if endpoint == "" {
+			continue
+		}
+		fs, err := w.collectFeedsByURL(ctx, site.Name, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		feeds = append(feeds, fs...)
+	}
+	return feeds, nil
+}
+
+func (w *Worker) collectFeedsByURL(ctx context.Context, name, endpoint string) ([]*Feed, error) {
 	client := http.DefaultClient
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, site.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, errors.Newf(errors.Internal, err, "create get request to %v failed", site.URL)
+		return nil, errors.Newf(errors.Internal, err, "create get request to %v failed", endpoint)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.Newf(errors.Internal, err, "request feeds to %v failed", site.URL)
+		return nil, errors.Newf(errors.Internal, err, "request feeds to %v failed", endpoint)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, errors.Newf(errors.Internal, nil, "invalid feed response: %v", resp.Status)
 	}
-	return w.collectFeeds(ctx, site, resp.Body)
+	return w.collectFeeds(ctx, name, endpoint, resp.Body)
 }
 
-func (w *Worker) collectFeeds(ctx context.Context, site Site, r io.Reader) ([]*Feed, error) {
+func (w *Worker) collectFeeds(ctx context.Context, name, endpoint string, r io.Reader) ([]*Feed, error) {
 	feed, err := w.fp.Parse(r)
 	if err != nil {
-		return nil, errors.Newf(errors.Internal, err, "parse feeds at %v failed", site.URL)
+		return nil, errors.Newf(errors.Internal, err, "parse feeds at %v failed", endpoint)
 	}
 	if len(feed.Items) == 0 {
 		return nil, nil
@@ -116,7 +132,7 @@ func (w *Worker) collectFeeds(ctx context.Context, site Site, r io.Reader) ([]*F
 
 	var feeds []*Feed
 	var cursor time.Time
-	cursor, err = w.storage.GetLatestFeedWaterMark(ses, w.subscriber.Email, site.URL)
+	cursor, err = w.storage.GetLatestFeedWaterMark(ses, w.subscriber.Email, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +150,10 @@ func (w *Worker) collectFeeds(ctx context.Context, site Site, r io.Reader) ([]*F
 			authors = append(authors, a.Name)
 		}
 		ent := &Feed{
-			Id:          uuid.NewString(),
+			Id:          f.GUID,
 			Email:       Email(w.subscriber.Email),
-			SiteURL:     site.URL,
-			SiteName:    site.Name,
+			SiteURL:     endpoint,
+			SiteName:    name,
 			Title:       f.Title,
 			Description: f.Description,
 			Content:     f.Content,
