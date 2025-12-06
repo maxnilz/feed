@@ -5,3 +5,4 @@ config-prod.yaml
 feed
 feed.db
 feed.db.bak
+.env

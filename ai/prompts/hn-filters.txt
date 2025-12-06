@@ -1,0 +1,15 @@
+Deep internals of databases and storage engines: storage layouts such as LSM trees and B-trees, MVCC, transactions, WAL, compaction, crash recovery, buffer pools and indexing.
+
+Distributed systems and distributed SQL: sharding, Raft and other consensus protocols, replication, fault tolerance, consistency models, high availability and metadata or catalog system design.
+
+Analytical query engines and lakehouse systems: OLAP and HTAP execution, columnar query engines, Apache Spark internals, data lakehouse architecture, and table formats such as Parquet, Iceberg, Delta and Hudi.
+
+Data infrastructure and streaming systems: change data capture pipelines, streaming databases, Flink or Spark streaming internals, large-scale ingestion and integration into warehouses or lakehouses.
+
+Systems programming and performance engineering: Rust, C++ or Go systems development, memory layout and allocators, zero-copy structures, lock-free concurrency, performance tuning and low-level networking or RPC mechanics.
+
+Vector search and hybrid retrieval: approximate nearest neighbor algorithms such as HNSW, IVF, PQ and DiskANN, vector databases and integration of vector search into traditional databases.
+
+LLM infrastructure and agentic applications: retrieval-augmented generation systems, tool-use and function calling, LLM-based agents interacting with databases and services, and serving or reliability engineering for large language models.
+
+Strong preference for deep, technical, implementation-focused write-ups, engineering post-mortems and research-oriented content, and explicit deprioritization of high-level product marketing, funding announcements or superficial introductions.

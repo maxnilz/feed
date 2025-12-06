@@ -21,7 +21,7 @@ func TestSqllite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open storage with %s failed: %v", dbfile, err)
 	}
-	feeds := []*Feed{
+	items := []*Item{
 		{
 			"1",
 			"a@example.com",
@@ -76,16 +76,16 @@ func TestSqllite(t *testing.T) {
 	}
 	defer ses.Rollback()
 
-	if err := s.SaveFeeds(ses, feeds...); err != nil {
+	if err := s.SaveItems(ses, items...); err != nil {
 		t.Fatal(err)
 	}
 
 	ackAt := mustParseTime("2023-07-22 09:00:00")
-	for _, it := range feeds {
+	for _, it := range items {
 		if it.Id == "nack" {
 			continue
 		}
-		if err := s.AckFeeds(ses, ackAt, it.Id); err != nil {
+		if err := s.AckItems(ses, ackAt, it.Id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,7 +101,7 @@ func TestSqllite(t *testing.T) {
 	}
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			got, err := s.GetLatestFeedWaterMark(ses, c.email, c.site)
+			got, err := s.GetLatestItemWaterMark(ses, c.email, c.site)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -11,6 +11,21 @@ import (
 	"github.com/maxnilz/feed/errors"
 )
 
+// sessionKey is the context key for storing Session
+type sessionKey struct{}
+
+// WithSession returns a new context with the session stored in it
+func WithSession(ctx context.Context, ses Session) context.Context {
+	return context.WithValue(ctx, sessionKey{}, ses)
+}
+
+// sessionFromContext retrieves the session from context
+// Returns nil if no session is stored in the context
+func sessionFromContext(ctx context.Context) Session {
+	ses, _ := ctx.Value(sessionKey{}).(Session)
+	return ses
+}
+
 func NewStorage(cfg Config) (Storage, error) {
 	if cfg.DSN == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "missing dsn")
@@ -29,10 +44,12 @@ func NewStorage(cfg Config) (Storage, error) {
 
 type Storage interface {
 	NewSession(ctx context.Context) (Session, error)
-	NewAutoSession(ctx context.Context) (Session, error)
-	SaveFeeds(ses Session, feeds ...*Feed) error
-	AckFeeds(ses Session, at time.Time, feedIds ...string) error
-	GetLatestFeedWaterMark(ses Session, email, site string) (time.Time, error)
+	SaveItems(ses Session, items ...*Item) error
+	AckItems(ses Session, at time.Time, itemIds ...string) error
+	GetCursor(ses Session, email, source string) (time.Time, error)
+	UpdateCursor(ses Session, email, source string, latestPublishedAt time.Time) error
+	GetUnackedItems(ses Session, email string) ([]*Item, error)
+	ArchiveItems(ses Session, before time.Time) (int64, error)
 	Close() error
 }
 
@@ -51,11 +68,11 @@ type Session interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-type Feed struct {
+type Item struct {
 	Id          string
 	Email       Email
-	SiteURL     string
-	SiteName    string
+	SourceURL   string
+	SourceName  string
 	Title       string
 	Description string
 	Content     string
@@ -72,74 +89,88 @@ func (e Email) String() string {
 	return string(e)
 }
 
-type SitesFeeds struct {
-	// map of site name to feeds
-	m     map[string][]*Feed
+type UserItems struct {
+	// map of source name to items
+	m     map[string][]*Item
 	names []string
 }
 
-func (sf *SitesFeeds) add(name string, feed *Feed) {
+func (sf *UserItems) add(name string, item *Item) {
 	if sf.m == nil {
-		sf.m = make(map[string][]*Feed)
+		sf.m = make(map[string][]*Item)
 	}
 	if _, ok := sf.m[name]; !ok {
 		sf.names = append(sf.names, name)
 	}
-	sf.m[name] = append(sf.m[name], feed)
+	sf.m[name] = append(sf.m[name], item)
 }
 
-func (sf *SitesFeeds) get(name string) ([]*Feed, bool) {
-	feeds, ok := sf.m[name]
-	return feeds, ok
+func (sf *UserItems) get(name string) ([]*Item, bool) {
+	items, ok := sf.m[name]
+	return items, ok
 }
 
-type Feeds struct {
-	Emails []Email
-	List   []*Feed
-
-	// feeds by email
-	m map[Email]*SitesFeeds
+type Items struct {
+	// items by email
+	m map[Email]*UserItems
 }
 
-func (fs *Feeds) Append(feeds ...*Feed) {
+func (fs *Items) Append(items ...*Item) {
 	if fs.m == nil {
-		fs.m = make(map[Email]*SitesFeeds)
+		fs.m = make(map[Email]*UserItems)
 	}
-	for _, feed := range feeds {
-		fs.List = append(fs.List, feed)
-		sitesFeeds, ok := fs.m[feed.Email]
+	for _, item := range items {
+		userItems, ok := fs.m[item.Email]
 		if !ok {
-			sitesFeeds = &SitesFeeds{}
-			fs.m[feed.Email] = sitesFeeds
-			fs.Emails = append(fs.Emails, feed.Email)
+			userItems = &UserItems{}
+			fs.m[item.Email] = userItems
 		}
-		site := feed.SiteName
-		sitesFeeds.add(site, feed)
+		source := item.SourceName
+		userItems.add(source, item)
 	}
 }
 
-func (fs *Feeds) SitesFeeds(email Email) (*SitesFeeds, bool) {
-	sitesFeeds, ok := fs.m[email]
-	return sitesFeeds, ok
+func (fs *Items) Emails() []Email {
+	emails := make([]Email, 0, len(fs.m))
+	for email := range fs.m {
+		emails = append(emails, email)
+	}
+	return emails
 }
 
-func (fs *Feeds) String() string {
+func (fs *Items) List() []*Item {
+	var allItems []*Item
+	for _, userItems := range fs.m {
+		for _, sourceName := range userItems.names {
+			allItems = append(allItems, userItems.m[sourceName]...)
+		}
+	}
+	return allItems
+}
+
+func (fs *Items) UserItems(email Email) (*UserItems, bool) {
+	userItems, ok := fs.m[email]
+	return userItems, ok
+}
+
+func (fs *Items) String() string {
 	sb := strings.Builder{}
+	allItems := fs.List()
 	// total count
-	sb.WriteString(fmt.Sprintf("Total Feeds: %d\n", len(fs.List)))
+	sb.WriteString(fmt.Sprintf("Total Items: %d\n", len(allItems)))
 	// header
-	sb.WriteString("Id | Email | SiteURL | Title\n")
+	sb.WriteString("Id | Email | SourceURL | Title\n")
 	sb.WriteString(strings.Repeat("-", 60))
 	sb.WriteString("\n")
 	// items
-	for _, feed := range fs.List {
-		sb.WriteString(feed.Id)
+	for _, item := range allItems {
+		sb.WriteString(item.Id)
 		sb.WriteString(" | ")
-		sb.WriteString(feed.Email.String())
+		sb.WriteString(item.Email.String())
 		sb.WriteString(" | ")
-		sb.WriteString(feed.SiteURL)
+		sb.WriteString(item.SourceURL)
 		sb.WriteString(" | ")
-		sb.WriteString(feed.Title)
+		sb.WriteString(item.Title)
 		sb.WriteString("\n")
 	}
 	return sb.String()

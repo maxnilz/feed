@@ -3,15 +3,22 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/joho/godotenv"
+	"github.com/maxnilz/feed/ai"
 	"gopkg.in/yaml.v3"
 )
 
 func main() {
+	// Load .env file if it exists (ignore error if not found)
+	_ = godotenv.Load()
+
 	var configFile string
 	var verbose bool
 	flag.StringVar(&configFile, "config", "config.yaml", "configuration file")
@@ -32,35 +39,75 @@ func main() {
 		log.Fatalf("invalid config file: %v", err)
 	}
 
+	// Override config with environment variables if set
+	config.ApplyEnvOverrides()
+
 	logger := DefaultLogger
 	if verbose {
 		logger = VerboseLogger
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create singleton filter
+	filter, err := ai.NewFilter(ctx, config.Filter)
+	if err != nil {
+		log.Fatalf("failed to create filter: %v", err)
+	}
+	defer filter.Close()
 
 	// TODO: integrate with dependency injection, e.g. wire
 	storage, err := NewStorage(config)
 	if err != nil {
 		log.Fatal(err)
 	}
-	mailbox, err := NewMailbox(config, logger)
+	defer storage.Close()
+
+	notifier, err := NewNotifier(config, logger)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	scheduler := NewScheduler(logger)
+
+	// Register Fetchers
 	for _, subscriber := range config.Subscribers {
-		worker, err := NewWorker(subscriber, storage, mailbox)
+		fetcher, err := NewFetcher(subscriber, storage, filter, logger)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err = scheduler.Schedule(subscriber.Schedule, worker); err != nil {
+
+		// Fetcher runs on a global interval (or per source if config had it there)
+		// For now, let's make it a fixed interval from config.
+		// If fetchInterval is not set, use a default (e.g., 10 minutes)
+		interval := config.FetchInterval
+		if interval == 0 {
+			interval = 10 * time.Minute
+		}
+		// Create a cron spec for the interval (e.g. "@every 10m")
+		cronSpec := fmt.Sprintf("@every %s", interval.String())
+
+		if err = scheduler.Schedule(cronSpec, fetcher); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Register NotifierJobs for each subscriber
+	for _, subscriber := range config.Subscribers {
+		notifierJob := NewNotifierJob(subscriber, storage, notifier, logger)
+		if err = scheduler.Schedule(subscriber.Schedule, notifierJob); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Register ArchiverJob
+	archiverJob := NewArchiverJob(storage, logger, 7*24*time.Hour)   // Archive items older than 7 days
+	if err = scheduler.Schedule("@daily", archiverJob); err != nil { // Run once a day
+		log.Fatal(err)
+	}
 
 	scheduler.Start(ctx)
+	defer scheduler.Stop()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -73,6 +120,4 @@ func main() {
 	<-done
 
 	cancel()
-	scheduler.Stop()
-	storage.Close()
 }
