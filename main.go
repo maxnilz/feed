@@ -72,7 +72,7 @@ func main() {
 
 	// Register Fetchers
 	for _, subscriber := range config.Subscribers {
-		fetcher, err := NewFetcher(subscriber, storage, filter, logger)
+		fetcher, err := NewFetcher(subscriber, storage, filter, config.FetchTimeout, logger)
 		if err != nil {
 			log.Fatal(err)
 		}

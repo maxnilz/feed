@@ -26,10 +26,10 @@ func TestSqllite(t *testing.T) {
 			"1",
 			"a@example.com",
 			"https://foo.com/index.rss",
+			"Foo Feed",
 			"hello foo",
 			"a hello message",
 			"hello, my dear friend",
-			"",
 			"https://foo.com/1",
 			"2023-07-22 07:00:00",
 			"2023-07-22 07:00:00",
@@ -40,10 +40,10 @@ func TestSqllite(t *testing.T) {
 			"2",
 			"b@example.com",
 			"https://foo.com/index.rss",
+			"Foo Feed",
 			"hello foo",
 			"a hello message",
 			"hello, my dear friend",
-			"",
 			"https://foo.com/1",
 			"2023-07-22 08:00:00",
 			"2023-07-22 08:00:00",
@@ -54,10 +54,10 @@ func TestSqllite(t *testing.T) {
 			"nack",
 			"b@example.com",
 			"https://foo.com/index.rss",
+			"Foo Feed",
 			"hello foo",
 			"a hello message",
 			"hello, my dear friend",
-			"",
 			"https://foo.com/1",
 			"2023-07-22 09:00:00",
 			"2023-07-22 09:00:00",
@@ -85,28 +85,36 @@ func TestSqllite(t *testing.T) {
 		if it.Id == "nack" {
 			continue
 		}
-		if err := s.AckItems(ses, ackAt, it.Id); err != nil {
+		if err := s.AckItems(ses, ackAt, it); err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	// Test UpdateCursor and GetCursor
+	if err := s.UpdateCursor(ses, "a@example.com", "https://foo.com/index.rss", mustParseTime("2023-07-22 07:00:00")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateCursor(ses, "b@example.com", "https://foo.com/index.rss", mustParseTime("2023-07-22 08:00:00")); err != nil {
+		t.Fatal(err)
+	}
+
 	cases := []struct {
-		email             string
-		site              string
-		expectedWaterMark time.Time
+		email          string
+		site           string
+		expectedCursor time.Time
 	}{
 		{"a@example.com", "https://foo.com/index.rss", mustParseTime("2023-07-22 07:00:00")},
 		{"b@example.com", "https://foo.com/index.rss", mustParseTime("2023-07-22 08:00:00")},
-		{"c@example.com", "https://foo.com/index.rss", time.Time{}},
+		{"c@example.com", "https://foo.com/index.rss", time.Time{}}, // no cursor set
 	}
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			got, err := s.GetLatestItemWaterMark(ses, c.email, c.site)
+			got, err := s.GetCursor(ses, c.email, c.site)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != c.expectedWaterMark {
-				t.Fatalf("expected %v, got %v", c.expectedWaterMark, got)
+			if got != c.expectedCursor {
+				t.Fatalf("expected %v, got %v", c.expectedCursor, got)
 			}
 		})
 	}

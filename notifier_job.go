@@ -35,6 +35,10 @@ func (nj *NotifierJob) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Newf(errors.Internal, err, "new session failed")
 	}
+	ses, err = ses.Begin()
+	if err != nil {
+		return errors.Newf(errors.Internal, err, "begin transaction failed")
+	}
 	defer ses.Rollback()
 
 	items, err := nj.storage.GetUnackedItems(ses, nj.subscriber.Email)
@@ -51,14 +55,10 @@ func (nj *NotifierJob) Run(ctx context.Context) error {
 	itemsToSend := Items{}
 	itemsToSend.Append(items...)
 
-	if err := nj.notifier.Notify(itemsToSend, func(ackedItems ...*Item) error {
+	if err := nj.notifier.Notify(Email(nj.subscriber.Email), itemsToSend, func(ackedItems ...*Item) error {
 		// Acknowledge sent items in DB
-		itemIDs := make([]string, 0, len(ackedItems))
-		for _, item := range ackedItems {
-			itemIDs = append(itemIDs, item.Id)
-		}
-		if len(itemIDs) > 0 {
-			if err := nj.storage.AckItems(ses, time.Now(), itemIDs...); err != nil {
+		if len(ackedItems) > 0 {
+			if err := nj.storage.AckItems(ses, time.Now(), ackedItems...); err != nil {
 				return errors.Newf(errors.Internal, err, "ack items failed")
 			}
 		}
@@ -66,6 +66,8 @@ func (nj *NotifierJob) Run(ctx context.Context) error {
 	}); err != nil {
 		return errors.Newf(errors.Internal, err, "notification failed")
 	}
-
-	return ses.Commit() // Commit transaction after successful notification and ack
+	if err := ses.Commit(); err != nil {
+		return errors.Newf(errors.Internal, err, "commit notifier job failed")
+	}
+	return nil
 }

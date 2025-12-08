@@ -113,7 +113,7 @@ func TestFetch(t *testing.T) {
 		Email: "a@example.com",
 	}
 
-	sf, err := NewSourceFetcher(subscriber, source, storage, filter, VerboseLogger)
+	sf, err := NewSourceFetcher(subscriber, source, storage, filter, 0, VerboseLogger)
 	if err != nil {
 		t.Fatalf("NewSourceFetcher failed: %v", err)
 	}

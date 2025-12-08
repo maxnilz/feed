@@ -45,7 +45,7 @@ func NewStorage(cfg Config) (Storage, error) {
 type Storage interface {
 	NewSession(ctx context.Context) (Session, error)
 	SaveItems(ses Session, items ...*Item) error
-	AckItems(ses Session, at time.Time, itemIds ...string) error
+	AckItems(ses Session, at time.Time, items ...*Item) error
 	GetCursor(ses Session, email, source string) (time.Time, error)
 	UpdateCursor(ses Session, email, source string, latestPublishedAt time.Time) error
 	GetUnackedItems(ses Session, email string) ([]*Item, error)

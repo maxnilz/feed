@@ -55,15 +55,15 @@ func (s *sqllite) SaveItems(ses Session, items ...*Item) error {
 		var placeholders []string
 		var args []interface{}
 		for _, it := range batch {
-			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			args = append(args,
-				it.Id, it.Email, it.SourceURL, it.Title, it.Description, it.Content, it.Link, it.UpdatedAt,
+				it.Id, it.Email, it.SourceURL, it.SourceName, it.Title, it.Description, it.Content, it.Link, it.UpdatedAt,
 				it.PublishedAt, it.Author, it.FetchAt.Format(sqliteDateTimeFormat),
 			)
 		}
 
 		q := fmt.Sprintf(`
-INSERT OR IGNORE INTO item (id, email, source, title, description, content, link, updated_at, published_at, author, fetch_at) 
+INSERT OR IGNORE INTO item (id, email, source, source_name, title, description, content, link, updated_at, published_at, author, fetch_at)
 VALUES %s;`, strings.Join(placeholders, ","))
 
 		if _, err := ses.Exec(q, args...); err != nil {
@@ -73,48 +73,35 @@ VALUES %s;`, strings.Join(placeholders, ","))
 	return nil
 }
 
-func (s *sqllite) AckItems(ses Session, at time.Time, itemIds ...string) error {
-	if len(itemIds) == 0 {
+func (s *sqllite) AckItems(ses Session, at time.Time, items ...*Item) error {
+	if len(items) == 0 {
 		return nil
 	}
 
 	const batchSize = 50
 	ackTime := at.Format(sqliteDateTimeFormat)
 
-	for i := 0; i < len(itemIds); i += batchSize {
+	for i := 0; i < len(items); i += batchSize {
 		end := i + batchSize
-		if end > len(itemIds) {
-			end = len(itemIds)
+		if end > len(items) {
+			end = len(items)
 		}
-		batch := itemIds[i:end]
+		batch := items[i:end]
 
 		placeholders := make([]string, len(batch))
-		args := make([]interface{}, 0, len(batch)+1)
+		args := make([]interface{}, 0, len(batch)*3+1)
 		args = append(args, ackTime)
-		for j, id := range batch {
-			placeholders[j] = "?"
-			args = append(args, id)
+		for j, item := range batch {
+			placeholders[j] = "(?, ?, ?)"
+			args = append(args, item.Id, item.Email, item.SourceName)
 		}
 
-		q := fmt.Sprintf(`UPDATE item SET ack = 1, ack_at = ? WHERE id IN (%s)`, strings.Join(placeholders, ","))
+		q := fmt.Sprintf(`UPDATE item SET ack = 1, ack_at = ? WHERE (id, email, source_name) IN (%s)`, strings.Join(placeholders, ","))
 		if _, err := ses.Exec(q, args...); err != nil {
 			return errors.Newf(errors.Internal, err, "ack items failed")
 		}
 	}
 	return nil
-}
-
-func (s *sqllite) GetLatestItemWaterMark(ses Session, email, source string) (time.Time, error) {
-	q := `SELECT max(datetime(fetch_at)) FROM item WHERE email = ? AND source = ? AND ack = 1`
-	r := ses.QueryRow(q, email, source)
-	var out *string
-	if err := r.Scan(&out); err != nil {
-		return time.Time{}, errors.Newf(errors.Internal, err, "get latest notification water mark failed")
-	}
-	if out == nil {
-		return time.Time{}, nil
-	}
-	return time.Parse(sqliteDateTimeFormat, *out)
 }
 
 func (s *sqllite) GetCursor(ses Session, email, source string) (time.Time, error) {
@@ -163,7 +150,7 @@ func (s *sqllite) ArchiveItems(ses Session, before time.Time) (int64, error) {
 }
 
 func (s *sqllite) GetUnackedItems(ses Session, email string) ([]*Item, error) {
-	q := `SELECT id, email, source, title, description, content, link, updated_at, published_at, author, fetch_at FROM item WHERE email = ? AND ack = 0 ORDER BY published_at ASC`
+	q := `SELECT id, email, source, source_name, title, description, content, link, updated_at, published_at, author, fetch_at FROM item WHERE email = ? AND ack = 0 ORDER BY published_at ASC`
 	rows, err := ses.Query(q, email)
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "query unacked items failed")
@@ -175,7 +162,7 @@ func (s *sqllite) GetUnackedItems(ses Session, email string) ([]*Item, error) {
 		item := &Item{}
 		var fetchAtStr string // For scanning time string
 		if err := rows.Scan(
-			&item.Id, &item.Email, &item.SourceURL, &item.Title, &item.Description, &item.Content,
+			&item.Id, &item.Email, &item.SourceURL, &item.SourceName, &item.Title, &item.Description, &item.Content,
 			&item.Link, &item.UpdatedAt, &item.PublishedAt, &item.Author, &fetchAtStr,
 		); err != nil {
 			return nil, errors.Newf(errors.Internal, err, "scan unacked item failed")
@@ -204,6 +191,7 @@ CREATE TABLE item (
     id TEXT NOT NULL,
     email TEXT NOT NULL,
     source TEXT NOT NULL,
+    source_name TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -214,7 +202,7 @@ CREATE TABLE item (
     fetch_at TEXT NOT NULL,
     ack INTEGER NOT NULL DEFAULT 0,
     ack_at TEXT,
-    PRIMARY KEY (id, email)
+    PRIMARY KEY (id, email, source_name)
 );
 CREATE INDEX idx_item_email_source_ack ON item(email, source, ack);
 
@@ -222,6 +210,7 @@ CREATE TABLE history_item (
     id TEXT NOT NULL,
     email TEXT NOT NULL,
     source TEXT NOT NULL,
+    source_name TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -232,7 +221,7 @@ CREATE TABLE history_item (
     fetch_at TEXT NOT NULL,
     ack INTEGER NOT NULL DEFAULT 0,
     ack_at TEXT,
-    PRIMARY KEY (id, email)
+    PRIMARY KEY (id, email, source_name)
 );
 CREATE INDEX idx_history_item_fetch_at ON history_item(fetch_at);
 

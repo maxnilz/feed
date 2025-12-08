@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	stderr "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,9 @@ type SourceFetcher struct {
 	// Storage for persistence
 	storage Storage
 
+	// HTTP client for fetching feeds
+	client *http.Client
+
 	// Feed parser
 	fp *gofeed.Parser
 
@@ -36,7 +40,7 @@ type SourceFetcher struct {
 	logger Logger
 }
 
-func NewSourceFetcher(subscriber Subscriber, source Source, storage Storage, filter ai.Filter, logger Logger) (*SourceFetcher, error) {
+func NewSourceFetcher(subscriber Subscriber, source Source, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger Logger) (*SourceFetcher, error) {
 	if subscriber.Name == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber name is required")
 	}
@@ -51,11 +55,16 @@ func NewSourceFetcher(subscriber Subscriber, source Source, storage Storage, fil
 		}
 	}
 
+	if fetchTimeout == 0 {
+		fetchTimeout = 30 * time.Second
+	}
+
 	return &SourceFetcher{
 		subscriber: subscriber,
 		source:     source,
 		filter:     filter,
 		storage:    storage,
+		client:     &http.Client{Timeout: fetchTimeout},
 		fp:         gofeed.NewParser(),
 		logger:     logger,
 	}, nil
@@ -67,9 +76,15 @@ func (sf *SourceFetcher) Fetch(ctx context.Context) ([]*Item, error) {
 	var items []*Item
 
 	for _, endpoint := range sf.source.AllURLs() {
+		sf.logger.Info("Fetching", "source", sf.source.Name, "endpoint", endpoint)
 		fetched, err := sf.fetchByURL(ctx, endpoint)
 		if err != nil {
-			return nil, err
+			// Ignore error
+			sf.logger.Error(err, "source", sf.source.Name, "endpoint", endpoint)
+			continue
+		}
+		if len(fetched) == 0 {
+			continue
 		}
 		items = append(items, fetched...)
 	}
@@ -77,13 +92,16 @@ func (sf *SourceFetcher) Fetch(ctx context.Context) ([]*Item, error) {
 }
 
 func (sf *SourceFetcher) fetchByURL(ctx context.Context, endpoint string) ([]*Item, error) {
-	client := http.DefaultClient
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "create get request to %v failed", endpoint)
 	}
-	resp, err := client.Do(req)
+	resp, err := sf.client.Do(req)
 	if err != nil {
+		if stderr.Is(err, context.DeadlineExceeded) || stderr.Is(err, context.Canceled) {
+			sf.logger.Info("Fetch timeout, skipping", "source", sf.source.Name, "endpoint", endpoint)
+			return nil, nil
+		}
 		return nil, errors.Newf(errors.Internal, err, "request feeds to %v failed", endpoint)
 	}
 	defer resp.Body.Close()
@@ -104,6 +122,7 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 		return nil, errors.Newf(errors.Internal, err, "parse feeds at %v failed", endpoint)
 	}
 	if len(feed.Items) == 0 {
+		sf.logger.Info("no new items fetched", "source", sf.source.Name, "endpoint", endpoint)
 		return nil, nil
 	}
 	sort.Sort(feed)
@@ -143,6 +162,7 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 	}
 
 	if len(candidates) == 0 {
+		sf.logger.Info("no new candidates", "source", sf.source.Name, "endpoint", endpoint)
 		return nil, nil
 	}
 
@@ -162,8 +182,12 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 		for _, a := range gofeedItem.Authors {
 			authors = append(authors, a.Name)
 		}
+		id := gofeedItem.GUID
+		if id == "" {
+			id = gofeedItem.Link
+		}
 		item := &Item{
-			Id:          gofeedItem.GUID,
+			Id:          id,
 			Email:       Email(sf.subscriber.Email),
 			SourceURL:   endpoint,
 			SourceName:  sf.source.Name,
@@ -208,7 +232,7 @@ type Fetcher struct {
 	sourceFetchers []*SourceFetcher
 }
 
-func NewFetcher(subscriber Subscriber, storage Storage, filter ai.Filter, logger Logger) (*Fetcher, error) {
+func NewFetcher(subscriber Subscriber, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger Logger) (*Fetcher, error) {
 	if subscriber.Name == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber name is required")
 	}
@@ -218,7 +242,7 @@ func NewFetcher(subscriber Subscriber, storage Storage, filter ai.Filter, logger
 
 	var sourceFetchers []*SourceFetcher
 	for _, source := range subscriber.Sources {
-		sf, err := NewSourceFetcher(subscriber, source, storage, filter, logger)
+		sf, err := NewSourceFetcher(subscriber, source, storage, filter, fetchTimeout, logger)
 		if err != nil {
 			return nil, err
 		}

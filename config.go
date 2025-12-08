@@ -11,6 +11,7 @@ type Config struct {
 	DSN           string          `yaml:"dsn"`
 	Filter        ai.FilterConfig `yaml:"filter"`
 	FetchInterval time.Duration   `yaml:"fetchInterval"`
+	FetchTimeout  time.Duration   `yaml:"fetchTimeout"`
 	Subscribers   []Subscriber    `yaml:"subscribers"`
 	MailSender    MailSender      `yaml:"mailSender"`
 }
