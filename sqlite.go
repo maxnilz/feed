@@ -55,15 +55,15 @@ func (s *sqllite) SaveItems(ses Session, items ...*Item) error {
 		var placeholders []string
 		var args []interface{}
 		for _, it := range batch {
-			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+			placeholders = append(placeholders, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			args = append(args,
 				it.Id, it.Email, it.SourceURL, it.SourceName, it.Title, it.Description, it.Content, it.Link, it.UpdatedAt,
-				it.PublishedAt, it.Author, it.FetchAt.Format(sqliteDateTimeFormat),
+				it.PublishedAt, it.Author, it.Score, it.FetchAt.Format(sqliteDateTimeFormat),
 			)
 		}
 
 		q := fmt.Sprintf(`
-INSERT OR IGNORE INTO item (id, email, source, source_name, title, description, content, link, updated_at, published_at, author, fetch_at)
+INSERT OR IGNORE INTO item (id, email, source, source_name, title, description, content, link, updated_at, published_at, author, score, fetch_at)
 VALUES %s;`, strings.Join(placeholders, ","))
 
 		if _, err := ses.Exec(q, args...); err != nil {
@@ -150,7 +150,7 @@ func (s *sqllite) ArchiveItems(ses Session, before time.Time) (int64, error) {
 }
 
 func (s *sqllite) GetUnackedItems(ses Session, email string) ([]*Item, error) {
-	q := `SELECT id, email, source, source_name, title, description, content, link, updated_at, published_at, author, fetch_at FROM item WHERE email = ? AND ack = 0 ORDER BY published_at ASC`
+	q := `SELECT id, email, source, source_name, title, description, content, link, updated_at, published_at, author, score, fetch_at FROM item WHERE email = ? AND ack = 0 ORDER BY score DESC, published_at DESC`
 	rows, err := ses.Query(q, email)
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "query unacked items failed")
@@ -163,7 +163,7 @@ func (s *sqllite) GetUnackedItems(ses Session, email string) ([]*Item, error) {
 		var fetchAtStr string // For scanning time string
 		if err := rows.Scan(
 			&item.Id, &item.Email, &item.SourceURL, &item.SourceName, &item.Title, &item.Description, &item.Content,
-			&item.Link, &item.UpdatedAt, &item.PublishedAt, &item.Author, &fetchAtStr,
+			&item.Link, &item.UpdatedAt, &item.PublishedAt, &item.Author, &item.Score, &fetchAtStr,
 		); err != nil {
 			return nil, errors.Newf(errors.Internal, err, "scan unacked item failed")
 		}
@@ -181,13 +181,8 @@ func (s *sqllite) Close() error {
 }
 
 func (s *sqllite) migrate(ctx context.Context) error {
-	q := `
-DROP TABLE IF EXISTS item;
-DROP TABLE IF EXISTS history_item;
-DROP TABLE IF EXISTS feed; 
-DROP TABLE IF EXISTS subscription_cursor;
-
-CREATE TABLE item (
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS item (
     id TEXT NOT NULL,
     email TEXT NOT NULL,
     source TEXT NOT NULL,
@@ -203,10 +198,9 @@ CREATE TABLE item (
     ack INTEGER NOT NULL DEFAULT 0,
     ack_at TEXT,
     PRIMARY KEY (id, email, source_name)
-);
-CREATE INDEX idx_item_email_source_ack ON item(email, source, ack);
-
-CREATE TABLE history_item (
+);`,
+		`CREATE INDEX IF NOT EXISTS idx_item_email_source_ack ON item(email, source, ack);`,
+		`CREATE TABLE IF NOT EXISTS history_item (
     id TEXT NOT NULL,
     email TEXT NOT NULL,
     source TEXT NOT NULL,
@@ -222,18 +216,47 @@ CREATE TABLE history_item (
     ack INTEGER NOT NULL DEFAULT 0,
     ack_at TEXT,
     PRIMARY KEY (id, email, source_name)
-);
-CREATE INDEX idx_history_item_fetch_at ON history_item(fetch_at);
-
-CREATE TABLE subscription_cursor (
+);`,
+		`CREATE INDEX IF NOT EXISTS idx_history_item_fetch_at ON history_item(fetch_at);`,
+		`CREATE TABLE IF NOT EXISTS subscription_cursor (
     email TEXT NOT NULL,
     source TEXT NOT NULL,
     last_published_at TEXT NOT NULL,
     PRIMARY KEY (email, source)
-);
-`
-	if _, err := s.db.ExecContext(ctx, q); err != nil {
-		return errors.Newf(errors.Internal, err, "migrate sqlite schemas failed")
+);`,
+	}
+
+	for _, q := range queries {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
+			return errors.Newf(errors.Internal, err, "exec schema query failed")
+		}
+	}
+
+	if err := s.addColumnIfNotExists(ctx, "item", "score", "REAL NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.addColumnIfNotExists(ctx, "history_item", "score", "REAL NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *sqllite) addColumnIfNotExists(ctx context.Context, table, column, colDef string) error {
+	// Check if column exists
+	q := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, column)
+	var count int
+	if err := s.db.QueryRowContext(ctx, q).Scan(&count); err != nil {
+		return errors.Newf(errors.Internal, err, "check column %s.%s failed", table, column)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	// Add column
+	alter := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, colDef)
+	if _, err := s.db.ExecContext(ctx, alter); err != nil {
+		return errors.Newf(errors.Internal, err, "add column %s.%s failed", table, column)
 	}
 	return nil
 }

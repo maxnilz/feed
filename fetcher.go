@@ -80,7 +80,7 @@ func (sf *SourceFetcher) Fetch(ctx context.Context) ([]*Item, error) {
 		fetched, err := sf.fetchByURL(ctx, endpoint)
 		if err != nil {
 			// Ignore error
-			sf.logger.Error(err, "source", sf.source.Name, "endpoint", endpoint)
+			sf.logger.Error(err, "fetch failed", "source", sf.source.Name, "endpoint", endpoint)
 			continue
 		}
 		if len(fetched) == 0 {
@@ -198,6 +198,7 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 			UpdatedAt:   gofeedItem.Updated,
 			PublishedAt: gofeedItem.Published,
 			Author:      strings.Join(authors, ", "),
+			Score:       scores[i],
 			FetchAt:     time.Now(),
 		}
 		items = append(items, item)

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"github.com/maxnilz/feed/errors"
 )
@@ -18,9 +19,9 @@ const emailBodyTemplate = `<body>
 {{- range .Items -}}
 <li><a href="{{.Link}}">{{.Title}}</a>
 {{- if .Id}}&nbsp;<a href="{{.Id}}">[guid]</a>{{- end}}
-&nbsp;{{.PublishedAt}}
-{{- if .UpdatedAt}}&nbsp;{{.UpdatedAt}}{{- end}}
-</li>
+&nbsp;[{{printf "%.2f" .Score}}]
+&nbsp;{{.DisplayPublishedAt}}
+{{- if .DisplayUpdatedAt}}&nbsp;{{.DisplayUpdatedAt}}{{- end}}</li>
 {{- end -}}
 </ol>
 {{- end -}}
@@ -66,8 +67,11 @@ func NewNotifier(cfg Config, logger Logger) (Notifier, error) {
 		Logger:      logger,
 		tmpl:        tmpl,
 		sourceOrder: sourceOrder,
+		sendMail:    smtp.SendMail,
 	}, nil
 }
+
+type sendMailFunc func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
 
 type smtpNotifier struct {
 	hostPort    string
@@ -77,11 +81,18 @@ type smtpNotifier struct {
 	Logger      Logger
 	tmpl        *template.Template
 	sourceOrder map[Email][]string
+	sendMail    sendMailFunc
+}
+
+type renderItem struct {
+	*Item
+	DisplayPublishedAt string
+	DisplayUpdatedAt   string
 }
 
 type sourceData struct {
 	Name  string
-	Items []*Item
+	Items []*renderItem
 }
 
 func (s *smtpNotifier) Notify(email Email, items Items, callback NotifyCallback) error {
@@ -99,14 +110,26 @@ func (s *smtpNotifier) Notify(email Email, items Items, callback NotifyCallback)
 		sourceNames = userItems.names
 	}
 
+	now := time.Now()
+
 	for _, source := range sourceNames {
 		sourceItems, ok := userItems.get(source)
 		if !ok || len(sourceItems) == 0 {
 			continue
 		}
+
+		var renderItems []*renderItem
+		for _, item := range sourceItems {
+			renderItems = append(renderItems, &renderItem{
+				Item:               item,
+				DisplayPublishedAt: formatDisplayTime(item.PublishedAt, now),
+				DisplayUpdatedAt:   formatDisplayTime(item.UpdatedAt, now),
+			})
+		}
+
 		sources = append(sources, sourceData{
 			Name:  source,
-			Items: sourceItems,
+			Items: renderItems,
 		})
 		fs = append(fs, sourceItems...)
 	}
@@ -127,7 +150,7 @@ func (s *smtpNotifier) Notify(email Email, items Items, callback NotifyCallback)
 	}
 
 	s.Logger.Info("Send RSS feeds notification", "email", email, "items", len(fs))
-	if err := smtp.SendMail(s.hostPort, s.auth, s.senderAddr, []string{email.String()}, buf.Bytes()); err != nil {
+	if err := s.sendMail(s.hostPort, s.auth, s.senderAddr, []string{email.String()}, buf.Bytes()); err != nil {
 		const shortErrMsg = "short response: "
 		// Ignore the error if it's a short response error, refer to
 		//  smpt.Client.Quit
@@ -146,4 +169,38 @@ func (s *smtpNotifier) Notify(email Email, items Items, callback NotifyCallback)
 		}
 	}
 	return nil
+}
+
+func formatDisplayTime(s string, now time.Time) string {
+	// Try parsing with common layouts
+	layouts := []string{
+		time.RFC3339,
+		time.RFC1123,
+		time.RFC1123Z,
+		"2006-01-02 15:04:05",
+	}
+
+	var t time.Time
+	var err error
+	parsed := false
+
+	for _, layout := range layouts {
+		t, err = time.Parse(layout, s)
+		if err == nil {
+			parsed = true
+			break
+		}
+	}
+
+	if !parsed {
+		return s
+	}
+
+	// Check if today (same year, month, day)
+	if t.Year() == now.Year() && t.Month() == now.Month() && t.Day() == now.Day() {
+		// Return time and timezone
+		return t.Format("15:04 MST")
+	}
+
+	return s
 }

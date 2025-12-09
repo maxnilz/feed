@@ -80,6 +80,7 @@ type Item struct {
 	UpdatedAt   string
 	PublishedAt string
 	Author      string
+	Score       float32
 	FetchAt     time.Time
 }
 

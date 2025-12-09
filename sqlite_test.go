@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -13,6 +15,81 @@ func mustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+func TestMigration(t *testing.T) {
+	dbFile := "/tmp/feed_migration_test.db"
+	os.Remove(dbFile) // Start fresh
+
+	// 1. Setup old schema (manually)
+	db, err := sql.Open("sqlite3", dbFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSchema := `
+    CREATE TABLE item (
+        id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_name TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        content TEXT NOT NULL,
+        link TEXT NOT NULL,
+        updated_at TEXT,
+        published_at TEXT NOT NULL,
+        author TEXT NOT NULL,
+        fetch_at TEXT NOT NULL,
+        ack INTEGER NOT NULL DEFAULT 0,
+        ack_at TEXT,
+        PRIMARY KEY (id, email, source_name)
+    );
+    `
+	if _, err := db.Exec(oldSchema); err != nil {
+		db.Close()
+		t.Fatalf("setup old schema failed: %v", err)
+	}
+	db.Close()
+
+	// 2. Run Migration via newSQLite
+	s, err := newSQLite(dbFile)
+	if err != nil {
+		t.Fatalf("newSQLite failed: %v", err)
+	}
+	defer s.Close()
+
+	// 3. Verify Migration by saving and retrieving an item with score
+	ctx := context.Background()
+	ses, err := s.NewSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	item := &Item{
+		Id:          "test-migration",
+		Email:       "test@example.com",
+		SourceName:  "test-source",
+		Title:       "Test Title",
+		PublishedAt: "2023-01-01 12:00:00",
+		FetchAt:     time.Now(),
+		Score:       0.75,
+	}
+
+	if err := s.SaveItems(ses, item); err != nil {
+		t.Fatalf("SaveItems failed (migration issue?): %v", err)
+	}
+
+	// Verify
+	items, err := s.GetUnackedItems(ses, "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Score != 0.75 {
+		t.Errorf("expected score 0.75, got %f", items[0].Score)
+	}
 }
 
 func TestSqllite(t *testing.T) {
@@ -34,6 +111,7 @@ func TestSqllite(t *testing.T) {
 			"2023-07-22 07:00:00",
 			"2023-07-22 07:00:00",
 			"foo",
+			0.5,
 			mustParseTime("2023-07-22 07:00:00"),
 		},
 		{
@@ -48,6 +126,7 @@ func TestSqllite(t *testing.T) {
 			"2023-07-22 08:00:00",
 			"2023-07-22 08:00:00",
 			"foo",
+			0.8,
 			mustParseTime("2023-07-22 08:00:00"),
 		},
 		{
@@ -62,6 +141,7 @@ func TestSqllite(t *testing.T) {
 			"2023-07-22 09:00:00",
 			"2023-07-22 09:00:00",
 			"foo",
+			0.9,
 			mustParseTime("2023-07-22 09:00:00"),
 		},
 	}
