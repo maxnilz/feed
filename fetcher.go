@@ -218,7 +218,7 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 	)
 	for i, item := range items {
 		msg := fmt.Sprintf(" -> %02d", i+1)
-		sf.logger.Info(msg, "id", item.Id, "title", item.Title)
+		sf.logger.Info(msg, "id", item.Id, "title", item.Title, "score", item.Score)
 	}
 
 	return items, nil

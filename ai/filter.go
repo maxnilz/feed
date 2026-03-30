@@ -35,9 +35,10 @@ const (
 
 // FilterConfig holds global configuration for the AI filter.
 type FilterConfig struct {
-	Type           FilterType `yaml:"type"`           // "embedding", "gemini", or "openai", defaults to "embedding"
-	GeminiAPIKey   string     `yaml:"geminiApiKey"`   // API key for Gemini (used when type is "gemini" or "embedding")
-	OpenAIAPIKey   string     `yaml:"openaiApiKey"`   // API key for OpenAI (used when type is "openai")
+	Type         FilterType `yaml:"type"`         // "embedding", "gemini", or "openai", defaults to "embedding"
+	Model        string     `yaml:"model"`        // Model name for the selected LLM provider (used when type is "gemini" or "openai")
+	GeminiAPIKey string     `yaml:"geminiApiKey"` // API key for Gemini (used when type is "gemini" or "embedding")
+	OpenAIAPIKey string     `yaml:"openaiApiKey"` // API key for OpenAI (used when type is "openai")
 }
 
 // GetFilterType returns the filter type, defaulting to embedding if not set.
@@ -147,9 +148,9 @@ func scanLines(scanner *bufio.Scanner) ([]string, error) {
 func NewFilter(ctx context.Context, cfg FilterConfig) (Filter, error) {
 	switch cfg.GetFilterType() {
 	case FilterTypeGemini:
-		return NewGeminiFilter(ctx, cfg.GeminiAPIKey)
+		return NewGeminiFilter(ctx, cfg.GeminiAPIKey, cfg.Model)
 	case FilterTypeOpenAI:
-		return NewOpenAIFilter(cfg.OpenAIAPIKey)
+		return NewOpenAIFilter(cfg.OpenAIAPIKey, cfg.Model)
 	case FilterTypeEmbedding:
 		return NewEmbeddingFilter(ctx, cfg.GeminiAPIKey)
 	default:

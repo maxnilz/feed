@@ -74,6 +74,7 @@ func parseFeedSource(txt string) (*gofeed.Feed, error) {
 }
 
 func TestFetch(t *testing.T) {
+	_ = godotenv.Load()
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	if geminiAPIKey == "" {
 		t.Skip("GEMINI_API_KEY is not set, skipping TestFetch")
@@ -83,7 +84,7 @@ func TestFetch(t *testing.T) {
 		t.Skip("OPENAI_API_KEY is not set, skipping TestFetch")
 	}
 	af := ai.FilterConfig{
-		Type:         ai.FilterTypeOpenAI,
+		Type:         ai.FilterTypeGemini,
 		GeminiAPIKey: geminiAPIKey,
 		OpenAIAPIKey: openaiAPIKey,
 	}

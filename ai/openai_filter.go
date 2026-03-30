@@ -16,15 +16,18 @@ type OpenAIFilter struct {
 	model  string
 }
 
-func NewOpenAIFilter(apiKey string) (*OpenAIFilter, error) {
+func NewOpenAIFilter(apiKey, model string) (*OpenAIFilter, error) {
 	if apiKey == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "API key is required for OpenAI filter")
+	}
+	if model == "" {
+		model = "gpt-4.1"
 	}
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 
 	return &OpenAIFilter{
 		client: &client,
-		model:  "gpt-4.1",
+		model:  model,
 	}, nil
 }
 

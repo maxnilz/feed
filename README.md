@@ -18,6 +18,7 @@ A tool for fetching network rss & send notification over email. Support multiple
     dsn: "sqlite3:///abs/path/to/feed.db"
     filter:
       type: "embedding" # "embedding", "gemini" or "openai", defaults to "embedding"
+      model: "" # Optional model name for "gemini" or "openai"; defaults to provider default when empty
       geminiApiKey: "your-gemini-api-key" # Gemini API for semantic filtering
       openaiApiKey: your-openai-key
     fetchInterval: 10m # How often to fetch new items (e.g., 10m, 1h). Default 10 minutes.

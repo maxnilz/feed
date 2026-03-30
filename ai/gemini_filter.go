@@ -25,11 +25,12 @@ type FilterResponseItem struct {
 }
 
 type GeminiFilter struct {
-	client *genai.Client
-	model  *genai.GenerativeModel
+	client    *genai.Client
+	model     *genai.GenerativeModel
+	modelName string
 }
 
-func NewGeminiFilter(ctx context.Context, apiKey string) (*GeminiFilter, error) {
+func NewGeminiFilter(ctx context.Context, apiKey, modelName string) (*GeminiFilter, error) {
 	if apiKey == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "API key is required for Gemini filter")
 	}
@@ -37,7 +38,10 @@ func NewGeminiFilter(ctx context.Context, apiKey string) (*GeminiFilter, error) 
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "create genai client failed")
 	}
-	model := client.GenerativeModel("gemini-2.5-flash")
+	if modelName == "" {
+		modelName = "gemini-2.5-flash"
+	}
+	model := client.GenerativeModel(modelName)
 	model.SetTemperature(0)
 	model.ResponseMIMEType = "application/json"
 	model.ResponseSchema = &genai.Schema{
@@ -54,8 +58,9 @@ func NewGeminiFilter(ctx context.Context, apiKey string) (*GeminiFilter, error) 
 	}
 
 	return &GeminiFilter{
-		client: client,
-		model:  model,
+		client:    client,
+		model:     model,
+		modelName: modelName,
 	}, nil
 }
 
