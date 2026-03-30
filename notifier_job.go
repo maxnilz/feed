@@ -6,16 +6,17 @@ import (
 	"time"
 
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 )
 
 type NotifierJob struct {
 	subscriber Subscriber
 	storage    Storage
 	notifier   Notifier
-	logger     Logger
+	logger     logging.Logger
 }
 
-func NewNotifierJob(subscriber Subscriber, storage Storage, notifier Notifier, logger Logger) *NotifierJob {
+func NewNotifierJob(subscriber Subscriber, storage Storage, notifier Notifier, logger logging.Logger) *NotifierJob {
 	return &NotifierJob{
 		subscriber: subscriber,
 		storage:    storage,

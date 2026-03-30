@@ -8,6 +8,7 @@ import (
 
 	"github.com/maxnilz/feed/ai/prompts"
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 )
 
 // FilterItem represents an item to be evaluated by the filter.
@@ -145,15 +146,23 @@ func scanLines(scanner *bufio.Scanner) ([]string, error) {
 	return lines, nil
 }
 
-func NewFilter(ctx context.Context, cfg FilterConfig) (Filter, error) {
+func NewFilter(ctx context.Context, logger logging.Logger, cfg FilterConfig) (Filter, error) {
+	var (
+		filter Filter
+		err    error
+	)
 	switch cfg.GetFilterType() {
 	case FilterTypeGemini:
-		return NewGeminiFilter(ctx, cfg.GeminiAPIKey, cfg.Model)
+		filter, err = NewGeminiFilter(ctx, cfg.GeminiAPIKey, cfg.Model)
 	case FilterTypeOpenAI:
-		return NewOpenAIFilter(cfg.OpenAIAPIKey, cfg.Model)
+		filter, err = NewOpenAIFilter(cfg.OpenAIAPIKey, cfg.Model)
 	case FilterTypeEmbedding:
-		return NewEmbeddingFilter(ctx, cfg.GeminiAPIKey)
+		filter, err = NewEmbeddingFilter(ctx, cfg.GeminiAPIKey)
 	default:
-		return NewEmbeddingFilter(ctx, cfg.GeminiAPIKey)
+		filter, err = NewEmbeddingFilter(ctx, cfg.GeminiAPIKey)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return newCachedFilter(filter, logger, defaultCachedFilterEntries), nil
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 	"github.com/robfig/cron/v3"
 )
 
@@ -15,7 +16,7 @@ type Job interface {
 	Run(ctx context.Context) error
 }
 
-func NewScheduler(logger Logger) *Scheduler {
+func NewScheduler(logger logging.Logger) *Scheduler {
 	return &Scheduler{
 		Mutex:     sync.Mutex{},
 		jobWaiter: sync.WaitGroup{},
@@ -30,7 +31,7 @@ type Scheduler struct {
 	running   bool
 	jobWaiter sync.WaitGroup
 
-	logger Logger
+	logger logging.Logger
 }
 
 func (s *Scheduler) Schedule(spec string, job Job) error {

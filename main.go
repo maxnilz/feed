@@ -12,6 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/maxnilz/feed/ai"
+	"github.com/maxnilz/feed/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,15 +43,15 @@ func main() {
 	// Override config with environment variables if set
 	config.ApplyEnvOverrides()
 
-	logger := DefaultLogger
+	logger := logging.DefaultLogger
 	if verbose {
-		logger = VerboseLogger
+		logger = logging.VerboseLogger
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create singleton filter
-	filter, err := ai.NewFilter(ctx, config.Filter)
+	filter, err := ai.NewFilter(ctx, logger, config.Filter)
 	if err != nil {
 		log.Fatalf("failed to create filter: %v", err)
 	}

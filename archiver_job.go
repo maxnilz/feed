@@ -6,15 +6,16 @@ import (
 	"time"
 
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 )
 
 type ArchiverJob struct {
 	storage       Storage
-	logger        Logger
+	logger        logging.Logger
 	archivePeriod time.Duration // e.g., 7 * 24 * time.Hour (7 days)
 }
 
-func NewArchiverJob(storage Storage, logger Logger, archivePeriod time.Duration) *ArchiverJob {
+func NewArchiverJob(storage Storage, logger logging.Logger, archivePeriod time.Duration) *ArchiverJob {
 	return &ArchiverJob{
 		storage:       storage,
 		logger:        logger,

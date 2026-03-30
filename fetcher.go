@@ -13,6 +13,7 @@ import (
 
 	"github.com/maxnilz/feed/ai"
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -37,10 +38,10 @@ type SourceFetcher struct {
 	fp *gofeed.Parser
 
 	// Logger
-	logger Logger
+	logger logging.Logger
 }
 
-func NewSourceFetcher(subscriber Subscriber, source Source, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger Logger) (*SourceFetcher, error) {
+func NewSourceFetcher(subscriber Subscriber, source Source, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger logging.Logger) (*SourceFetcher, error) {
 	if subscriber.Name == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber name is required")
 	}
@@ -228,12 +229,12 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 type Fetcher struct {
 	name    string
 	storage Storage
-	logger  Logger
+	logger  logging.Logger
 
 	sourceFetchers []*SourceFetcher
 }
 
-func NewFetcher(subscriber Subscriber, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger Logger) (*Fetcher, error) {
+func NewFetcher(subscriber Subscriber, storage Storage, filter ai.Filter, fetchTimeout time.Duration, logger logging.Logger) (*Fetcher, error) {
 	if subscriber.Name == "" {
 		return nil, errors.Newf(errors.InvalidArgument, nil, "subscriber name is required")
 	}

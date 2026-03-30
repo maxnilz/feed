@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 )
 
 const emailBodyTemplate = `<body>
@@ -33,7 +34,7 @@ type Notifier interface {
 	Notify(email Email, items Items, callback NotifyCallback) error
 }
 
-func NewNotifier(cfg Config, logger Logger) (Notifier, error) {
+func NewNotifier(cfg Config, logger logging.Logger) (Notifier, error) {
 	mailSender := cfg.MailSender
 	host, _, err := net.SplitHostPort(mailSender.SmtpServer)
 	if err != nil {
@@ -78,7 +79,7 @@ type smtpNotifier struct {
 	password    string
 	auth        smtp.Auth
 	senderAddr  string
-	Logger      Logger
+	Logger      logging.Logger
 	tmpl        *template.Template
 	sourceOrder map[Email][]string
 	sendMail    sendMailFunc

@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/maxnilz/feed/ai"
 	"github.com/maxnilz/feed/errors"
+	"github.com/maxnilz/feed/logging"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -74,7 +75,6 @@ func parseFeedSource(txt string) (*gofeed.Feed, error) {
 }
 
 func TestFetch(t *testing.T) {
-	_ = godotenv.Load()
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	if geminiAPIKey == "" {
 		t.Skip("GEMINI_API_KEY is not set, skipping TestFetch")
@@ -88,7 +88,7 @@ func TestFetch(t *testing.T) {
 		GeminiAPIKey: geminiAPIKey,
 		OpenAIAPIKey: openaiAPIKey,
 	}
-	filter, err := ai.NewFilter(context.Background(), af)
+	filter, err := ai.NewFilter(context.Background(), logging.DefaultLogger, af)
 	if err != nil {
 		t.Fatalf("NewFilter failed: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestFetch(t *testing.T) {
 		Email: "a@example.com",
 	}
 
-	sf, err := NewSourceFetcher(subscriber, source, storage, filter, 0, VerboseLogger)
+	sf, err := NewSourceFetcher(subscriber, source, storage, filter, 0, logging.VerboseLogger)
 	if err != nil {
 		t.Fatalf("NewSourceFetcher failed: %v", err)
 	}
