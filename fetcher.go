@@ -118,9 +118,12 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 		return nil, errors.Newf(errors.Internal, err, "create session from %v failed", endpoint)
 	}
 
-	feed, err := sf.fp.Parse(r)
+	feed, removed, err := parseFeedWithSanitization(sf.fp, r)
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "parse feeds at %v failed", endpoint)
+	}
+	if removed > 0 {
+		sf.logger.Info("sanitized xml control chars", "source", sf.source.Name, "endpoint", endpoint, "removed", removed)
 	}
 	if len(feed.Items) == 0 {
 		sf.logger.Info("no new items fetched", "source", sf.source.Name, "endpoint", endpoint)

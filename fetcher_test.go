@@ -1,14 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	stderr "errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/textproto"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/joho/godotenv"
@@ -30,8 +32,23 @@ func TestErr(t *testing.T) {
 	}
 }
 
+func TestParseFeedTxt(t *testing.T) {
+	wd, _ := os.Getwd()
+	fname := filepath.Join(wd, "testdata", "364.xml")
+	b, err := ioutil.ReadFile(fname)
+	if err != nil {
+		t.Errorf("error reading file: %v", err)
+	}
+	feedTxt := string(b)
+	feed, err := parseFeedSource(feedTxt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(len(feed.Items))
+}
+
 func TestParseFeed(t *testing.T) {
-	url := "https://hnrss.org/newest"
+	url := "https://36kr.com/feed"
 	feedTxt, err := fetchFeed(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
@@ -65,13 +82,26 @@ func fetchFeed(ctx context.Context, url string) (string, error) {
 }
 
 func parseFeedSource(txt string) (*gofeed.Feed, error) {
-	rd := bytes.NewReader([]byte(txt))
 	fp := gofeed.NewParser()
-	feed, err := fp.Parse(rd)
+	feed, _, err := parseFeedWithSanitization(fp, strings.NewReader(txt))
 	if err != nil {
 		return nil, errors.Newf(errors.Internal, err, "parse feed failed")
 	}
 	return feed, nil
+}
+
+func TestParseFeedSourceAllowsInvalidControlChars(t *testing.T) {
+	raw := "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>demo</title><item><title>Hello\x1eWorld</title><link>https://example.com/a</link><guid>a</guid></item></channel></rss>"
+	feed, err := parseFeedSource(raw)
+	if err != nil {
+		t.Fatalf("parseFeedSource failed: %v", err)
+	}
+	if len(feed.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(feed.Items))
+	}
+	if feed.Items[0].Title != "HelloWorld" {
+		t.Fatalf("unexpected sanitized title: %q", feed.Items[0].Title)
+	}
 }
 
 func TestFetch(t *testing.T) {
