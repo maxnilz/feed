@@ -21,12 +21,20 @@ const emailBodyTemplate = `<body>
 <li><a href="{{.Link}}">{{.Title}}</a>
 {{- if .Id}}&nbsp;<a href="{{.Id}}">[guid]</a>{{- end}}
 &nbsp;[{{printf "%.2f" .Score}}]
-&nbsp;{{.DisplayPublishedAt}}
-{{- if .DisplayUpdatedAt}}&nbsp;{{.DisplayUpdatedAt}}{{- end}}</li>
+&nbsp;{{compactTime .DisplayPublishedAt}}
+{{- if .DisplayUpdatedAt}}&nbsp;{{compactTime .DisplayUpdatedAt}}{{- end}}</li>
 {{- end -}}
 </ol>
 {{- end -}}
 </body>`
+
+func mustEmailTemplate() *template.Template {
+	return template.Must(
+		template.New("email").
+			Funcs(template.FuncMap{"compactTime": compactTimeString}).
+			Parse(emailBodyTemplate),
+	)
+}
 
 type NotifyCallback func(items ...*Item) error
 
@@ -46,17 +54,9 @@ func NewNotifier(cfg Config, logger logging.Logger) (Notifier, error) {
 	}
 	auth := smtp.PlainAuth("", senderAddr, password, host)
 
-	tmpl := template.Must(template.New("email").Parse(emailBodyTemplate))
+	tmpl := mustEmailTemplate()
 
-	// Build source order map from config
-	sourceOrder := make(map[Email][]string)
-	for _, subscriber := range cfg.Subscribers {
-		var sourceNames []string
-		for _, source := range subscriber.Sources {
-			sourceNames = append(sourceNames, source.Name)
-		}
-		sourceOrder[Email(subscriber.Email)] = sourceNames
-	}
+	sourceOrder := buildSourceOrder(cfg.Subscribers)
 
 	// TODO: need to support smtp over socks or http proxy
 
@@ -85,56 +85,8 @@ type smtpNotifier struct {
 	sendMail    sendMailFunc
 }
 
-type renderItem struct {
-	*Item
-	DisplayPublishedAt string
-	DisplayUpdatedAt   string
-}
-
-type sourceData struct {
-	Name  string
-	Items []*renderItem
-}
-
 func (s *smtpNotifier) Notify(email Email, items Items, callback NotifyCallback) error {
-	userItems, ok := items.UserItems(email)
-	if !ok {
-		return nil
-	}
-
-	var sources []sourceData
-	var fs []*Item
-
-	// Use config order if available, otherwise fall back to insertion order
-	sourceNames := s.sourceOrder[email]
-	if len(sourceNames) == 0 {
-		sourceNames = userItems.names
-	}
-
-	now := time.Now()
-
-	for _, source := range sourceNames {
-		sourceItems, ok := userItems.get(source)
-		if !ok || len(sourceItems) == 0 {
-			continue
-		}
-
-		var renderItems []*renderItem
-		for _, item := range sourceItems {
-			renderItems = append(renderItems, &renderItem{
-				Item:               item,
-				DisplayPublishedAt: formatDisplayTime(item.PublishedAt, now),
-				DisplayUpdatedAt:   formatDisplayTime(item.UpdatedAt, now),
-			})
-		}
-
-		sources = append(sources, sourceData{
-			Name:  source,
-			Items: renderItems,
-		})
-		fs = append(fs, sourceItems...)
-	}
-
+	sources, fs := buildNotificationSources(email, items, s.sourceOrder, time.Now())
 	if len(sources) == 0 {
 		return nil
 	}

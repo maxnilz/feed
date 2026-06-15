@@ -107,6 +107,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	api := NewAPIServer(config, storage, logger)
+	api.Start(ctx)
+	defer api.Stop()
+
 	scheduler.Start(ctx)
 	defer scheduler.Stop()
 

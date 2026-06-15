@@ -48,7 +48,7 @@ func TestParseFeedTxt(t *testing.T) {
 }
 
 func TestParseFeed(t *testing.T) {
-	url := "https://36kr.com/feed"
+	url := "https://tech.meituan.com/feed/"
 	feedTxt, err := fetchFeed(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)

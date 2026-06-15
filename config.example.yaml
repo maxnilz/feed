@@ -6,6 +6,10 @@ filter:
   openaiApiKey: your-openai-key
 fetchInterval: 10m # How often to fetch new items (e.g., 10m, 1h). Default 10 minutes.
 fetchTimeout: 30s # HTTP timeout for fetching feeds. Default 30 seconds.
+api:
+  enabled: false
+  listenAddr: ":8080"
+  authToken: "" # Optional bearer token for REST API requests
 subscribers:
   - name: foo
     email: foo@example.com

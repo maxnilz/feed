@@ -23,6 +23,10 @@ A tool for fetching network rss & send notification over email. Support multiple
       openaiApiKey: your-openai-key
     fetchInterval: 10m # How often to fetch new items (e.g., 10m, 1h). Default 10 minutes.
     fetchTimeout: 30s # HTTP timeout for fetching feeds. Default 30 seconds.
+    api:
+      enabled: false
+      listenAddr: ":8080"
+      authToken: "" # Optional bearer token for REST API requests
     subscribers:
       - name: foo
         email: foo@example.com
@@ -60,6 +64,52 @@ A tool for fetching network rss & send notification over email. Support multiple
       senderAddr: sender@example.com
       password: password of sender email
     ```
+
+## REST API
+
+When `api.enabled` is true, feed starts an HTTP server to expose pending (unacknowledged) items without changing email notifications.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/notifications/pending` | Pending items for the first configured subscriber |
+| `GET` | `/api/v1/subscribers/{email}/notifications/pending` | Pending items for a specific subscriber |
+| `GET` | `/healthz` | Health check |
+
+#### Response format
+
+- **HTML** (default) — rendered page, suitable for opening in a browser
+- **JSON** — add `?json` query parameter to get a machine-readable response
+
+#### Authentication
+
+Set `api.authToken` in config and pass the token as a Bearer header. When `authToken` is empty, the API is open.
+
+### Examples
+
+Open in browser (HTML, first subscriber):
+```bash
+open "http://localhost:8080/api/v1/notifications/pending"
+```
+
+Specific subscriber, HTML:
+```bash
+curl -s "http://localhost:8080/api/v1/subscribers/foo%40example.com/notifications/pending"
+```
+
+JSON response:
+```bash
+curl -s "http://localhost:8080/api/v1/notifications/pending?json"
+curl -s "http://localhost:8080/api/v1/subscribers/foo%40example.com/notifications/pending?json"
+```
+
+With auth token:
+```bash
+curl -s -H "Authorization: Bearer your-token" \
+  "http://localhost:8080/api/v1/notifications/pending?json"
+```
+
 - Or you can run it via docker
     ```bash
     $ docker run --rm -v ${PWD}/config.yaml:/usr/local/feed/config.yaml -v ${PWD}/feed.db:/usr/local/feed/feed.db --name feed maxnilz/feed:0.2.0

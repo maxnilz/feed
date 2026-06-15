@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -129,7 +128,6 @@ func (sf *SourceFetcher) parseAndFilter(ctx context.Context, endpoint string, r 
 		sf.logger.Info("no new items fetched", "source", sf.source.Name, "endpoint", endpoint)
 		return nil, nil
 	}
-	sort.Sort(feed)
 
 	cursor, err := sf.storage.GetCursor(ses, sf.subscriber.Email, endpoint)
 	if err != nil {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html/template"
 	"net/smtp"
 	"strings"
 	"testing"
@@ -16,8 +15,8 @@ func (m *mockLogger) Error(err error, msg string, args ...any) {}
 
 func TestSmtpNotifier(t *testing.T) {
 	// Setup
-	tmpl := template.Must(template.New("email").Parse(emailBodyTemplate))
-	
+	tmpl := mustEmailTemplate()
+
 	sent := false
 	var sentMsg []byte
 
@@ -103,28 +102,26 @@ func TestSmtpNotifier(t *testing.T) {
 	}
 
 	// Verify Date Rendering
-	// Today should be HH:MM MST
-	expectedTime := now.Format("15:04 MST")
+	// Today should be compact HH:MM
+	expectedTime := now.Format("15:04")
 	if !strings.Contains(body, expectedTime) {
 		t.Errorf("body missing formatted time for today: %s", expectedTime)
 	}
 	// Today's UpdatedAt
-	expectedUpdatedTime := now.Add(1 * time.Hour).Format("15:04 MST")
+	expectedUpdatedTime := now.Add(1 * time.Hour).Format("15:04")
 	if !strings.Contains(body, expectedUpdatedTime) {
 		t.Errorf("body missing formatted updated time for today: %s", expectedUpdatedTime)
 	}
 
-	// Yesterday should include date (RFC3339 or whatever formatPublishedAt returns for non-today)
-	// formatPublishedAt returns original string if not today.
-	// Note: html/template escapes '+', so we check for that.
-	expectedYesterday := strings.ReplaceAll(yesterday.Format(time.RFC3339), "+", "&#43;")
+	// Yesterday should keep date in compact format.
+	expectedYesterday := yesterday.Format("01-02 15:04")
 	if !strings.Contains(body, expectedYesterday) {
 		t.Logf("Body content:\n%s", body)
-		t.Errorf("body missing full date for yesterday: %s", expectedYesterday)
+		t.Errorf("body missing compact date for yesterday: %s", expectedYesterday)
 	}
 	// Yesterday's UpdatedAt
-	expectedUpdatedYesterday := strings.ReplaceAll(yesterday.Add(1*time.Hour).Format(time.RFC3339), "+", "&#43;")
+	expectedUpdatedYesterday := yesterday.Add(1 * time.Hour).Format("01-02 15:04")
 	if !strings.Contains(body, expectedUpdatedYesterday) {
-		t.Errorf("body missing full updated date for yesterday: %s", expectedUpdatedYesterday)
+		t.Errorf("body missing compact updated date for yesterday: %s", expectedUpdatedYesterday)
 	}
 }

@@ -12,8 +12,15 @@ type Config struct {
 	Filter        ai.FilterConfig `yaml:"filter"`
 	FetchInterval time.Duration   `yaml:"fetchInterval"`
 	FetchTimeout  time.Duration   `yaml:"fetchTimeout"`
+	API           APIConfig       `yaml:"api"`
 	Subscribers   []Subscriber    `yaml:"subscribers"`
 	MailSender    MailSender      `yaml:"mailSender"`
+}
+
+type APIConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	ListenAddr string `yaml:"listenAddr"`
+	AuthToken  string `yaml:"authToken"`
 }
 
 type Subscriber struct {
@@ -62,5 +69,11 @@ func (c *Config) ApplyEnvOverrides() {
 	}
 	if v := os.Getenv("DSN"); v != "" {
 		c.DSN = v
+	}
+	if v := os.Getenv("API_LISTEN_ADDR"); v != "" {
+		c.API.ListenAddr = v
+	}
+	if v := os.Getenv("API_AUTH_TOKEN"); v != "" {
+		c.API.AuthToken = v
 	}
 }

@@ -36,6 +36,10 @@ func (aj *ArchiverJob) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Newf(errors.Internal, err, "new session failed")
 	}
+	ses, err = ses.Begin()
+	if err != nil {
+		return errors.Newf(errors.Internal, err, "begin session failed")
+	}
 	defer ses.Rollback() // Ensure rollback
 
 	archivedCount, err := aj.storage.ArchiveItems(ses, before)
